@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Neon City Nights · Studios</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0a0b13; --panel: #11121e; --panel-2: #171929; --line: #262a45; --ink: #e9eaf6; --dim: #8f94b8;
+  --magenta: #ff4fd0; --cyan: #35d0ff; --gold: #f4b800;
+  --f-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body { margin: 0; background: radial-gradient(1200px 500px at 50% -10%, #1a1440 0%, transparent 60%), var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); min-height: 100vh; }
+main { max-width: 1040px; margin: 0 auto; padding: 56px 20px 64px; }
+.eyebrow { font: 500 12px var(--f-mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--magenta); margin: 0 0 10px; }
+h1 { font: 700 clamp(30px, 5vw, 46px)/1.05 var(--f-display); margin: 0 0 12px; letter-spacing: 0.01em; }
+.lede { color: var(--dim); max-width: 60ch; margin: 0 0 36px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; }
+a.card { display: flex; flex-direction: column; gap: 14px; text-decoration: none; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; transition: border-color .15s, transform .15s; }
+a.card:hover, a.card:focus-visible { border-color: var(--cyan); transform: translateY(-2px); outline: none; }
+a.card .art { height: 130px; border-radius: 6px; background: #05050b; border: 1px solid var(--line); display: block; width: 100%; }
+a.card h2 { font: 700 21px var(--f-display); margin: 0; }
+a.card p { margin: 0; color: var(--dim); font-size: 14px; }
+a.card .tag { font: 500 11px var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--cyan); }
+a.card .go { margin-top: auto; font: 600 13px var(--f-display); color: var(--magenta); }
+section.flow { margin-top: 44px; border-top: 1px solid var(--line); padding-top: 24px; }
+section.flow h3 { font: 600 12px var(--f-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); margin: 0 0 10px; }
+section.flow p { color: var(--dim); max-width: 70ch; margin: 0 0 8px; }
+code { font: 13px var(--f-mono); background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Neon City Nights · studios</p>
+  <h1>One place for the game's art tools</h1>
+  <p class="lede">Three editors, one cloud save. Whatever is saved in any of them is stored in the same project, so you and your collaborator always see the latest.</p>
+  <div class="grid">
+    <a class="card" href="weapons/">
+      <svg class="art" viewBox="0 0 300 130" role="img" aria-label="A sword and a shot">
+        <rect width="300" height="130" fill="#05050b"/>
+        <g transform="translate(40 92) rotate(-24)"><rect x="0" y="-5" width="150" height="10" rx="2" fill="#9fb0d8"/><rect x="0" y="-2" width="150" height="3" fill="#dce6ff"/><rect x="-16" y="-14" width="10" height="28" rx="2" fill="#6a3cff"/><rect x="-44" y="-4" width="30" height="8" rx="2" fill="#3a2a66"/></g>
+        <circle cx="236" cy="48" r="30" fill="#ff4fd0" opacity=".14"/><circle cx="236" cy="48" r="18" fill="#ff4fd0" opacity=".35"/><circle cx="236" cy="48" r="9" fill="#ffd0f4"/>
+        <path d="M206 48H150" stroke="#ff4fd0" stroke-width="3" opacity=".5" stroke-linecap="round"/>
+      </svg>
+      <span class="tag">Held props &amp; shot visuals</span>
+      <h2>Weapons &amp; Shots</h2>
+      <p>The weapon each hero holds and the look of every projectile, drawn as layered vector shapes.</p>
+      <span class="go">Open →</span>
+    </a>
+    <a class="card" href="puppets/">
+      <svg class="art" viewBox="0 0 300 130" role="img" aria-label="A character outline with a pivot">
+        <rect width="300" height="130" fill="#05050b"/>
+        <g stroke="#35d0ff" stroke-width="2" fill="#11204a">
+          <circle cx="150" cy="30" r="14"/><path d="M130 52h40l8 40h-14l-4 26h-8l-4-26-4 26h-8l-4-26h-14z"/><path d="M130 54l-20 30 8 6 22-26z M170 54l20 30-8 6-22-26z" fill="#173a6a"/>
+        </g>
+        <g fill="#ff4fd0"><circle cx="150" cy="52" r="3.5"/><circle cx="130" cy="54" r="3.5"/><circle cx="170" cy="54" r="3.5"/><circle cx="142" cy="92" r="3.5"/><circle cx="158" cy="92" r="3.5"/></g>
+        <path d="M205 30a46 46 0 0 1 0 70" stroke="#f4b800" stroke-width="2" fill="none" stroke-dasharray="4 5"/>
+      </svg>
+      <span class="tag">Hero &amp; henchmen</span>
+      <h2>Puppet Studio</h2>
+      <p>The cutout-puppet characters: every drawing, pivot and animation number, with a live running preview.</p>
+      <span class="go">Open →</span>
+    </a>
+    <a class="card" href="arena/">
+      <svg class="art" viewBox="0 0 300 130" role="img" aria-label="The arena floor with an emblem and buildings">
+        <rect width="300" height="130" fill="#05050b"/>
+        <g fill="#14122a" stroke="#05050b" stroke-width="1"><rect x="20" y="8" width="38" height="22"/><rect x="62" y="8" width="38" height="22"/><rect x="104" y="8" width="38" height="22"/><rect x="158" y="8" width="38" height="22"/><rect x="200" y="8" width="38" height="22"/><rect x="242" y="8" width="38" height="22"/></g>
+        <g fill="#ffbf59" opacity=".9"><rect x="26" y="14" width="5" height="4"/><rect x="40" y="20" width="5" height="4"/><rect x="70" y="14" width="5" height="4"/><rect x="118" y="20" width="5" height="4"/><rect x="170" y="14" width="5" height="4"/><rect x="212" y="20" width="5" height="4"/><rect x="254" y="14" width="5" height="4"/></g>
+        <rect x="20" y="34" width="260" height="88" fill="#0b0b1f" stroke="#00e1ff" stroke-width="1.5"/>
+        <g stroke="#ff00d0" stroke-width="1" opacity=".7"><path d="M63 34v88M106 34v88M150 34v88M194 34v88M237 34v88M20 56h260M20 78h260M20 100h260"/></g>
+        <g transform="translate(150 78)" fill="none" stroke="#00e1ff"><circle r="24" opacity=".5"/><path d="M-14-8 0-16 14-8v16L0 16-14 8z" stroke-width="1.5"/><circle r="3" fill="#ffd0f4"/></g>
+      </svg>
+      <span class="tag">Backdrop &amp; border</span>
+      <h2>Arena Studio</h2>
+      <p>The plaza floor, light pools and the buildings round the walls: props made of shapes you can move, copy and recolour.</p>
+      <span class="go">Open →</span>
+    </a>
+  </div>
+  <section class="flow">
+    <h3>Getting an edit into the game</h3>
+    <p>Edits save to the cloud on their own. To bring them into the game, run the matching sync on the game's machine, then commit the result:</p>
+    <p><code>py tools/vector_shapes/sync_editor_shapes.py</code> weapons &nbsp;·&nbsp; <code>py tools/puppet_editor_web/sync_puppet.py</code> hero &nbsp;·&nbsp; <code>py tools/puppet_editor_web/sync_puppet.py --chars</code> henchmen &nbsp;·&nbsp; <code>py tools/arena_studio/sync_arena.py</code> arena</p>
+  </section>
+</main>
+</body>
+</html>
