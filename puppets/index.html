@@ -402,6 +402,14 @@ class Runner {
       setArm(R("armR"), k("arm_swing_front") * sw * mw - k("arm_idle") * Math.sin(this.t * 2.1), useRight ? this.aimW : 0);
       set(R("torso"), { rot: k("torso_lean_front") * this.lastAim[0] * this.aimW });
     }
+    // pivots with a motion (node.mv): same maths as HeroPuppet._apply_movers
+    const aimAxis = sideLike ? this.lastAim[1] : this.lastAim[0], rigIds = new Set(Object.values(rig || {}));
+    walk(root, n => {
+      if (isPoly(n) || !n.mv || rigIds.has(n.id)) return; const mv = n.mv, ph = mv.ph || 0, sv = Math.sin(this.phase * (mv.speed === undefined ? 1 : mv.speed) + ph);
+      let rot = ((mv.swing || 0) * sv + (mv.lean || 0)) * mw + (mv.sway || 0) * Math.sin(this.t * (mv.sway_rate === undefined ? 1.8 : mv.sway_rate) + ph) + (mv.aim || 0) * aimAxis * this.aimW;
+      const up = (Math.max(sv, 0) * (mv.lift || 0) + Math.abs(sv) * (mv.bob || 0)) * mw;
+      set(n, { rot: n.rot + (view === "right" ? -1 : 1) * rot, pos: [n.pos[0], n.pos[1] - up] });
+    });
     return out;
   }
 }
@@ -598,6 +606,7 @@ function renderTree() {
       const rn = rigNameOf(view, n); const nm = document.createElement("span"); nm.textContent = n.name || "node"; row.appendChild(nm);
       if (rn) { const tg = document.createElement("span"); tg.className = "tag"; tg.textContent = "rig:" + rn; row.appendChild(tg); }
       if (n.ow > 0) { const tg = document.createElement("span"); tg.className = "tag"; tg.textContent = "outlined"; row.appendChild(tg); }
+      if (n.mv) { const tg = document.createElement("span"); tg.className = "tag"; tg.textContent = "moves"; tg.title = "This pivot has a motion"; row.appendChild(tg); }
     }
     const eye = document.createElement("span"); eye.className = "eye" + (isHidden ? " off" : ""); eye.textContent = isHidden ? "◌" : "◉"; eye.title = isHidden ? "Hidden in this editing view only (the drawing, the preview and the game are not affected). Click to show." : "Click to hide this part while editing (editing view only, nothing is saved)";
     eye.addEventListener("click", e => { e.stopPropagation(); if (isHidden) ui.hiddenParts.delete(hkey); else ui.hiddenParts.add(hkey); renderTree(); renderEdit(); });
@@ -671,6 +680,7 @@ function renderInspectorBody() {
     ins.appendChild(field("Scale", xy(numInput(o.scale[0], v => change(() => { o.scale = [v, o.scale[1]]; }, "sx"), 0.05), numInput(o.scale[1], v => change(() => { o.scale = [o.scale[0], v]; }, "sy"), 0.05))));
     const tint = document.createElement("input"); tint.type = "color"; tint.value = "#" + (o.tint || "ffffff"); tint.addEventListener("input", () => change(() => { o.tint = tint.value.slice(1); }, "tint")); ins.appendChild(field("Tint", tint));
     if (!isRoot) layerControls(ins, o);
+    if (!isRoot && !rn) ins.appendChild(motionControls(o));
     ins.appendChild(sectionOutlineControls(o));
     const b = document.createElement("div"); b.className = "btns";
     b.append(btn("Add rectangle", () => addPoly(o, "rect")), btn("Add triangle", () => addPoly(o, "tri")), btn("Add hexagon", () => addPoly(o, "hex")), btn("Add pivot", () => addNode(o)));
@@ -706,6 +716,27 @@ function partPicker(o, parent) {
 }
 /* Outline the WHOLE section: one outline around the silhouette of the part's own polygons, drawn behind all of them
    (so no lines between its polygons). Turning it on switches the polygons' own outlines off; turning it off puts them back. */
+/* A MOTION for a pivot you added (not a rig part: those are animated by the game's own code). Stored as node.mv and played by HeroPuppet._apply_movers, driven by the run cycle, the clock and the aim. */
+function motionControls(o) {
+  const box = document.createElement("div"); box.style.display = "grid"; box.style.gap = "7px";
+  const t = document.createElement("div"); t.className = "sub"; t.textContent = "Motion"; t.style.cssText = "font:600 11px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--gold)"; box.appendChild(t);
+  const DEF = { speed: 1, sway_rate: 1.8 }, D = 180 / Math.PI;
+  const setMv = (key, v, def) => change(() => { o.mv = o.mv || {}; if (v === def || isNaN(v)) delete o.mv[key]; else o.mv[key] = Math.round(v * 10000) / 10000; if (!Object.keys(o.mv).length) delete o.mv; }, "mv");
+  const num = (label, key, tip, deg, def = 0, step = 1) => { const mv = o.mv || {}, raw = mv[key] === undefined ? def : mv[key]; const i = numInput(deg ? Math.round(raw * D * 10) / 10 : raw, v => setMv(key, deg ? v / D : v, def), step); i.title = tip; box.appendChild(field(label, i)); };
+  num("Run swing °", "swing", "Rotates back and forth with the run cycle (the way legs and arms swing). 0 = off. Negative swings the other way.", true);
+  num("Run speed ×", "speed", "How fast it follows the run cycle: 1 = the same as the legs, 2 = twice as fast (like the coat tail's flap).", false, 1, 0.25);
+  num("Phase °", "ph", "Start offset in the cycle, so two parts do not move in step (180 = opposite).", true);
+  num("Lean °", "lean", "A steady turn while running (like the coat tail streaming back).", true);
+  num("Lift", "lift", "Units it rises on the up-half of each step (like a stepping leg).", false, 0, 0.25);
+  num("Bounce", "bob", "Units it bounces with every step (like the head bob).", false, 0, 0.25);
+  num("Idle sway °", "sway", "A slow rotation that is always on, even standing still (like the coat tail's sway).", true);
+  num("Sway rate", "sway_rate", "Speed of the idle sway, radians per second.", false, 1.8, 0.1);
+  num("Aim turn °", "aim", "Turns toward the aim direction while aiming (like the torso lean).", true);
+  const h = document.createElement("p"); h.className = "hint"; h.textContent = "Added on top of this pivot's rest pose; everything inside it moves too. Watch it in the Live preview (Run / Idle / Aim). Rotations flip automatically on the Right drawing. Pivots you add are the only ones with this; the rig parts keep the game's own animation.";
+  box.appendChild(h);
+  if (o.mv) { const b = document.createElement("div"); b.className = "btns"; b.appendChild(btn("Clear motion", () => change(() => { delete o.mv; }), "danger")); box.appendChild(b); }
+  return box;
+}
 function sectionOutlineControls(o) {
   const box = document.createElement("div"); box.style.display = "grid"; box.style.gap = "9px";
   const polys = o.kids.filter(isPoly), on = o.ow > 0;
