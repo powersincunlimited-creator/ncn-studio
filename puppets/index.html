@@ -707,6 +707,8 @@ function renderInspectorBody() {
     b.append(btn("Add rectangle", () => addPoly(o, "rect")), btn("Add triangle", () => addPoly(o, "tri")), btn("Add hexagon", () => addPoly(o, "hex")), btn("Add pivot", () => addNode(o)));
     ins.appendChild(b);
     if (!isRoot) ins.appendChild(copyPivotControls(o, selectedParent()));
+    ins.appendChild(contentsControls(o));
+    if (!isRoot && !rn && !containsRig(o)) ins.appendChild(moveIntoControls(o, selectedParent()));
     if (!isRoot) { const b2 = document.createElement("div"); b2.className = "btns"; b2.append(btn("Delete part", deleteSelected, "danger", !!rn || containsRig(o))); ins.appendChild(b2); }
     const h = document.createElement("p"); h.className = "hint"; h.textContent = "Rotation and scale here are the REST values; running and aiming move the rig parts on top of them."; ins.appendChild(h);
   }
@@ -889,6 +891,69 @@ function copyPivotControls(o, parent) {
   }
   const h = document.createElement("p"); h.className = "hint"; h.textContent = "Copies the pivot with every polygon and sub-pivot inside it (and their motions). A copy of a rig part (arm, leg, tail...) is an ordinary pivot: it keeps the drawing but the game does not animate it, so give it a Motion. Mirror flips it left-right about its parent's origin."; wrap.appendChild(h);
   return field("Copy", wrap);
+}
+/* ---- Contents: copy / move everything INSIDE a pivot into another existing pivot (e.g. a refined legNear -> legFar), and re-parent a pivot ---- */
+const MIRROR_PAIRS = [["L", "R"], ["R", "L"]];
+function guessMirror(a, b) { return !!(a && b && a.length > 1 && a.slice(0, -1) === b.slice(0, -1) && MIRROR_PAIRS.some(([x, y]) => a.endsWith(x) && b.endsWith(y))); }
+/* fresh copies of a list of kids (new ids for sub-pivots, optionally flipped left-right about the origin) */
+function freshKids(kids, mirror) {
+  let id = nextId(); const out = clone(kids);
+  (function ren(list) { list.forEach(x => {
+    if (isPoly(x)) { delete x.poly.outline_was; if (mirror) x.poly.pts = x.poly.pts.map(q => [-q[0], q[1]]).reverse(); return; }
+    x.id = id++; if (mirror) { x.pos = [-x.pos[0], x.pos[1]]; x.rot = -x.rot; if (x.mv) ["swing", "lean", "sway", "aim"].forEach(k => { if (x.mv[k]) x.mv[k] = -x.mv[k]; }); }
+    ren(x.kids);
+  }); })(out);
+  return out;
+}
+function rigIdSet() { const ids = new Set(); Object.keys(doc.rig).forEach(v => Object.values(doc.rig[v]).forEach(i => ids.add(i))); return ids; }
+function contentsControls(o) {
+  const wrap = document.createElement("div"); wrap.style.display = "grid"; wrap.style.gap = "6px";
+  const row = document.createElement("div"); row.className = "btns"; const vs = document.createElement("select"), secs = document.createElement("select");
+  ["front", "back", "side", "right"].filter(v => doc.views[v]).forEach(v => { const op = document.createElement("option"); op.value = v; op.textContent = sideLabel(v)[0].toUpperCase() + sideLabel(v).slice(1); if (v === ui.view) op.selected = true; vs.appendChild(op); });
+  const chk = (label, on, tip) => { const i = document.createElement("input"); i.type = "checkbox"; i.checked = on; const l = document.createElement("label"); l.style.cssText = "display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)"; l.title = tip; l.append(i, label); return [i, l]; };
+  const [replaceBox, replaceL] = chk("replace what is there", true, "Remove the target's current polygons and sub-pivots first. Off: the copy is added on top of them."), [mirBox, mirL] = chk("mirror", false, "Flip left-right (on by default for an L / R pair such as legL -> legR)"), [styleBox, styleL] = chk("tint + section line", true, "Also copy this pivot's tint and section line (outline) settings onto the target");
+  const fill = () => {
+    const dst = vs.value, dstRoot = doc.views[dst], mine = new Set(); if (dst === ui.view) walk(o, n => { if (!isPoly(n)) mine.add(n); }); secs.innerHTML = "";
+    (function rec(n, depth) { if (isPoly(n) || mine.has(n)) return; const op = document.createElement("option"); op.value = n.id; const rn = rigNameOf(dst, n); op.textContent = "  ".repeat(depth) + (n.name || "node") + (rn && rn !== n.name ? ` (${rn})` : ""); secs.appendChild(op); n.kids.forEach(k => rec(k, depth + 1)); })(dstRoot, 0);
+    // a sensible default target: the counterpart of this pivot (legNear -> legFar, armL -> armR ...), else the first other section
+    const myRig = rigNameOf(ui.view, o), PAIR = { legNear: "legFar", legFar: "legNear", armNear: "armFar", armFar: "armNear", legL: "legR", legR: "legL", armL: "armR", armR: "armL", tailL: "tailR", tailR: "tailL" };
+    const rig = doc.rig[dst] || {}, want = myRig && (dst === ui.view ? PAIR[myRig] : (myRig in rig ? myRig : SEND_EQUIV[myRig])); if (want && rig[want] !== undefined) secs.value = String(rig[want]);
+    const tn = (() => { let n = null; walk(dstRoot, x => { if (!isPoly(x) && String(x.id) === secs.value) n = x; }); return n; })(); mirBox.checked = guessMirror(myRig, tn ? rigNameOf(dst, tn) : "");
+  };
+  vs.addEventListener("change", fill); secs.addEventListener("change", () => { const dst = vs.value; let n = null; walk(doc.views[dst], x => { if (!isPoly(x) && String(x.id) === secs.value) n = x; }); mirBox.checked = guessMirror(rigNameOf(ui.view, o), n ? rigNameOf(dst, n) : ""); }); fill();
+  const go = move => {
+    const dst = vs.value; let target = null; walk(doc.views[dst], n => { if (!isPoly(n) && String(n.id) === secs.value) target = n; }); if (!target || target === o) return;
+    const ids = rigIdSet(); let blocked = "";
+    if (replaceBox.checked) target.kids.forEach(k => { walk(k, n => { if (!isPoly(n) && ids.has(n.id)) blocked = n.name || "a rig part"; }); });
+    if (move) o.kids.forEach(k => { walk(k, n => { if (!isPoly(n) && ids.has(n.id)) blocked = n.name || "a rig part"; }); });
+    if (blocked) { setStatus((replaceBox.checked ? "Replacing would delete" : "Moving would take") + " the rig part '" + blocked + "': untick replace / use Copy instead", "warn"); return; }
+    const copies = freshKids(o.kids, mirBox.checked);
+    change(() => {
+      if (replaceBox.checked) target.kids = []; copies.forEach(c => target.kids.push(c));
+      if (styleBox.checked) { target.tint = o.tint; target.ow = o.ow; target.oc = o.oc; }
+      if (move) o.kids = [];
+    });
+    ui.view = dst; ui.sel = null; [...$("viewSeg").children].forEach(x => x.classList.toggle("on", x.dataset.view === dst)); render(); select({ obj: target });
+    setStatus((move ? "Moved" : "Copied") + " the contents of " + (o.name || "pivot") + " into " + (target.name || "part") + (replaceBox.checked ? " (replaced)" : " (added)"), "ok");
+  };
+  row.append(vs, secs, btn("Copy contents", () => go(false)), btn("Move contents", () => go(true))); wrap.appendChild(row);
+  const row2 = document.createElement("div"); row2.className = "btns"; row2.append(replaceL, mirL, styleL); wrap.appendChild(row2);
+  const h = document.createElement("p"); h.className = "hint"; h.textContent = "Copy or move EVERYTHING inside this pivot (polygons, sub-pivots, their motions) into another existing pivot, in any view: e.g. a refined legNear into legFar. The target keeps its own place, rotation, scale and rig role; only what it contains is replaced. Replace is blocked if it would delete a rig part."; wrap.appendChild(h);
+  return field("Contents", wrap);
+}
+/* Move a pivot (and everything in it) into another pivot of the same view without it moving on screen. Not for rig parts. */
+function moveIntoControls(o, parent) {
+  const sel = document.createElement("select"), root = doc.views[ui.view], mine = new Set(); walk(o, n => { if (!isPoly(n)) mine.add(n); });
+  (function rec(n, depth) { if (isPoly(n) || mine.has(n)) return; const op = document.createElement("option"); op.value = n.id; const rn = rigNameOf(ui.view, n); op.textContent = "  ".repeat(depth) + (n.name || "node") + (rn && rn !== n.name ? ` (${rn})` : ""); if (n === parent) op.selected = true; sel.appendChild(op); n.kids.forEach(k => rec(k, depth + 1)); })(root, 0);
+  sel.title = "Move this pivot into another part. It keeps its place on screen and goes to the front of that part.";
+  sel.addEventListener("change", () => {
+    let dest = null; walk(root, n => { if (!isPoly(n) && String(n.id) === sel.value) dest = n; }); if (!dest || dest === parent) return;
+    const inv = mInv(restWorld(root, dest)); if (!inv) { setStatus("that part has a zero scale", "bad"); return; }
+    const m = mMul(mMul(inv, restWorld(root, parent)), mLocal(o)), sx = Math.hypot(m[0], m[1]) || 1, rot = Math.atan2(m[1], m[0]), sy = (m[0] * m[3] - m[1] * m[2]) / sx;
+    change(() => { parent.kids.splice(parent.kids.indexOf(o), 1); o.pos = [round2(m[4]), round2(m[5])]; o.rot = round3(rot); o.scale = [round3(sx), round3(sy)]; dest.kids.push(o); });
+    select({ obj: o });
+  });
+  return field("Move into", sel);
 }
 function addNode(parent) { const n = { id: nextId(), name: "pivot", pos: [0, 0], rot: 0, scale: [1, 1], tint: "ffffff", kids: [] }; change(() => { parent.kids.push(n); }); select({ obj: n }); }
 function dup(mirror) {
