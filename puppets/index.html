@@ -708,6 +708,7 @@ function renderInspectorBody() {
     ins.appendChild(b);
     if (!isRoot) ins.appendChild(copyPivotControls(o, selectedParent()));
     ins.appendChild(contentsControls(o));
+    ins.appendChild(transformControls(o));
     if (!isRoot && !rn && !containsRig(o)) ins.appendChild(moveIntoControls(o, selectedParent()));
     if (!isRoot) { const b2 = document.createElement("div"); b2.className = "btns"; b2.append(btn("Delete part", deleteSelected, "danger", !!rn || containsRig(o))); ins.appendChild(b2); }
     const h = document.createElement("p"); h.className = "hint"; h.textContent = "Rotation and scale here are the REST values; running and aiming move the rig parts on top of them."; ins.appendChild(h);
@@ -954,6 +955,47 @@ function moveIntoControls(o, parent) {
     select({ obj: o });
   });
   return field("Move into", sel);
+}
+/* ---- Transform a pivot's CONTENTS: rotate / flip / scale everything inside it (polygons, sub-pivots and their contents), baked into the numbers, about the pivot's origin or the centre of its contents ---- */
+function contentCentre(node) {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  (function rec(kids, m) { kids.forEach(k => {
+    if (isPoly(k)) k.poly.pts.forEach(q => { const x = m[0] * q[0] + m[2] * q[1] + m[4], y = m[1] * q[0] + m[3] * q[1] + m[5]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); });
+    else rec(k.kids, mMul(m, mLocal(k)));
+  }); })(node.kids, [1, 0, 0, 1, 0, 0]);
+  return x1 < x0 ? [0, 0] : [(x0 + x1) / 2, (y0 + y1) / 2];
+}
+const MV_ROT = ["swing", "lean", "sway", "aim"];
+function xformKids(kids, kind, v, c) {
+  if (kind === "rotate") {
+    const cs = Math.cos(v), sn = Math.sin(v), R = p => [c[0] + (p[0] - c[0]) * cs - (p[1] - c[1]) * sn, c[1] + (p[0] - c[0]) * sn + (p[1] - c[1]) * cs];
+    kids.forEach(k => { if (isPoly(k)) k.poly.pts = k.poly.pts.map(q => R(q).map(round3)); else { k.pos = R(k.pos).map(round3); k.rot = round3(k.rot + v); } });
+  } else if (kind === "flip") {   // v = "x" (left-right) or "y" (top-bottom)
+    const F = p => v === "x" ? [2 * c[0] - p[0], p[1]] : [p[0], 2 * c[1] - p[1]];
+    kids.forEach(k => {
+      if (isPoly(k)) { k.poly.pts = k.poly.pts.map(q => F(q).map(round3)).reverse(); return; }
+      k.pos = F(k.pos).map(round3); k.rot = round3(-k.rot); if (k.mv) MV_ROT.forEach(m => { if (k.mv[m]) k.mv[m] = -k.mv[m]; });
+      xformKids(k.kids, "flip", v, [0, 0]);   // its contents flip about its own origin
+    });
+  } else if (kind === "scale") {
+    kids.forEach(k => {
+      if (isPoly(k)) { k.poly.pts = k.poly.pts.map(q => [c[0] + (q[0] - c[0]) * v, c[1] + (q[1] - c[1]) * v].map(round3)); return; }
+      k.pos = [c[0] + (k.pos[0] - c[0]) * v, c[1] + (k.pos[1] - c[1]) * v].map(round3); if (k.mv) ["lift", "bob"].forEach(m => { if (k.mv[m]) k.mv[m] = round3(k.mv[m] * v); });
+      xformKids(k.kids, "scale", v, [0, 0]);
+    });
+  }
+}
+function transformControls(o) {
+  const wrap = document.createElement("div"); wrap.style.display = "grid"; wrap.style.gap = "6px";
+  const cb = document.createElement("input"); cb.type = "checkbox"; const cl = document.createElement("label"); cl.style.cssText = "display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)"; cl.title = "Off: turn / flip / scale around this pivot's own origin (the pink cross). On: around the middle of everything inside it."; cl.append(cb, "about the middle of the contents");
+  const run = (kind, v) => { if (!o.kids.length) { setStatus("Nothing inside this pivot yet", "warn"); return; } change(() => { xformKids(o.kids, kind, v, cb.checked ? contentCentre(o) : [0, 0]); }); };
+  const r1 = document.createElement("div"); r1.className = "btns"; r1.append(btn("\u21ba 90\u00b0", () => run("rotate", -Math.PI / 2)), btn("\u21ba 15\u00b0", () => run("rotate", -Math.PI / 12)), btn("\u21bb 15\u00b0", () => run("rotate", Math.PI / 12)), btn("\u21bb 90\u00b0", () => run("rotate", Math.PI / 2)));
+  const deg = numInput(45, () => {}, 1); deg.style.width = "64px"; const rb = btn("Rotate by \u00b0", () => run("rotate", (parseFloat(deg.value) || 0) * Math.PI / 180)); r1.append(deg, rb);
+  const r2 = document.createElement("div"); r2.className = "btns"; r2.append(btn("Flip \u2194", () => run("flip", "x")), btn("Flip \u2195", () => run("flip", "y")), btn("Grow 10%", () => run("scale", 1.1)), btn("Shrink 10%", () => run("scale", 1 / 1.1)));
+  const k = numInput(1.25, () => {}, 0.05); k.style.width = "64px"; r2.append(k, btn("Scale by \u00d7", () => { const f = parseFloat(k.value); if (f > 0) run("scale", f); }));
+  wrap.append(r1, r2, cl);
+  const h = document.createElement("p"); h.className = "hint"; h.textContent = "Changes everything INSIDE this pivot (its polygons, sub-pivots and their contents), baked into the drawing. The pivot's own position, rotation and scale (the boxes above) are not touched. Undo with Ctrl+Z."; wrap.appendChild(h);
+  return field("Transform", wrap);
 }
 function addNode(parent) { const n = { id: nextId(), name: "pivot", pos: [0, 0], rot: 0, scale: [1, 1], tint: "ffffff", kids: [] }; change(() => { parent.kids.push(n); }); select({ obj: n }); }
 function dup(mirror) {
