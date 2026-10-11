@@ -141,6 +141,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
       <canvas id="cv" tabindex="0" aria-label="Arena canvas"></canvas>
       <div id="tools">
         <button type="button" id="fitBtn" title="Frame the whole arena">Fit arena</button>
+        <button type="button" id="zoomOutBtn" title="Zoom out">&minus;</button><button type="button" id="zoomInBtn" title="Zoom in (or pinch with two fingers)">+</button>
         <button type="button" id="selBtn" title="Zoom to the selected prop">Zoom to prop</button>
         <button type="button" id="gridBtn">Grid</button>
         <button type="button" id="wallBtn" class="on" title="Mark the walls (the playable area) on the canvas">Walls</button>
@@ -415,6 +416,24 @@ cv.addEventListener("pointerup", () => {
 });
 $("crossPill").addEventListener("click", () => { if (!crossList.length) return; const [p, k] = crossList[crossIdx++ % crossList.length]; ui.sel = p.id; ui.part = k; render(); zoomToProp(); });
 cv.addEventListener("contextmenu", e => e.preventDefault());
+$("zoomInBtn").addEventListener("click", () => { ui.zoom = Math.min(6, ui.zoom * 1.4); redraw(); }); $("zoomOutBtn").addEventListener("click", () => { ui.zoom = Math.max(0.05, ui.zoom / 1.4); redraw(); });
+/* touch / pen: two fingers pinch to zoom and drag to pan (one finger or the pen edits as usual) */
+(function () {
+  const pts = new Map(); let pinch = null;
+  const mid = () => { const a = [...pts.values()]; return [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2, Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]) || 1]; };
+  cv.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse") return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) { drag = null; syncSize(); const r = cv.getBoundingClientRect(), m = mid(); pinch = { d0: m[2], z0: ui.zoom, a0: [sx(m[0] - r.left), sy(m[1] - r.top)] }; e.stopImmediatePropagation(); e.preventDefault(); }
+    else if (pts.size > 2) e.stopImmediatePropagation();
+  }, true);
+  cv.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]); if (!pinch || pts.size < 2) return;
+    e.stopImmediatePropagation(); const r = cv.getBoundingClientRect(), m = mid(); ui.zoom = Math.max(0.05, Math.min(6, pinch.z0 * m[2] / pinch.d0));
+    ui.pan = [pinch.a0[0] - (m[0] - r.left - W / 2) / ui.zoom, pinch.a0[1] - (m[1] - r.top - H / 2) / ui.zoom]; redraw();
+  }, true);
+  const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  cv.addEventListener("pointerup", end, true); cv.addEventListener("pointercancel", end, true);
+})();
 cv.addEventListener("wheel", e => {
   e.preventDefault(); syncSize(); const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, X = sx(px), Y = sy(py);
   ui.zoom = Math.max(0.05, Math.min(6, ui.zoom * Math.exp(-e.deltaY * 0.0015)));

@@ -2116,6 +2116,27 @@ function onPartDown(ev, pi){
   stage.setPointerCapture(ev.pointerId);
   renderParts();
 }
+/* touch / pen: two fingers pinch to zoom and drag to pan (one finger or the pen edits as usual) */
+(function(){
+  const pts = new Map(); let pinch = null, queued = false;
+  const mid = () => { const a = [...pts.values()]; return [(a[0][0]+a[1][0])/2, (a[0][1]+a[1][1])/2, Math.hypot(a[0][0]-a[1][0], a[0][1]-a[1][1]) || 1]; };
+  stage.addEventListener('pointerdown', ev => {
+    if(ev.pointerType === 'mouse') return; pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    if(pts.size === 2){
+      dragging = null; partDragging = null; panDrag = null; stage.classList.remove('panning');
+      const m = mid(); pinch = {d0:m[2], a0:clientToStage(m[0], m[1]), w0:view.w, h0:view.h}; ev.stopImmediatePropagation(); ev.preventDefault();
+    } else if(pts.size > 2) ev.stopImmediatePropagation();
+  }, true);
+  stage.addEventListener('pointermove', ev => {
+    if(!pts.has(ev.pointerId)) return; pts.set(ev.pointerId, [ev.clientX, ev.clientY]); if(!pinch || pts.size < 2) return;
+    ev.stopImmediatePropagation(); const m = mid(), f = Math.min(Math.max(m[2] / pinch.d0, 0.05), 40);
+    view.w = pinch.w0 / f; view.h = pinch.h0 / f; const cr = stageContentRect();
+    view.minX = pinch.a0.x - (m[0] - cr.left) / cr.width * view.w; view.minY = pinch.a0.y - (m[1] - cr.top) / cr.height * view.h;
+    if(!queued){ queued = true; requestAnimationFrame(() => { queued = false; renderStage(); }); }
+  }, true);
+  const end = ev => { pts.delete(ev.pointerId); if(pts.size < 2) pinch = null; };
+  stage.addEventListener('pointerup', end, true); stage.addEventListener('pointercancel', end, true);
+})();
 stage.addEventListener('pointerdown', ev => {   // eyedropper: take the colour of the part that was clicked
   if(pickingColour < 0) return;
   ev.stopImmediatePropagation(); ev.preventDefault();

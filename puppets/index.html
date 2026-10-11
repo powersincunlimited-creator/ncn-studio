@@ -152,6 +152,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
         <button type="button" id="handlesBtn" class="on">Handles</button>
         <button type="button" id="outlinesBtn" class="on" title="Show or hide every outline on this canvas, to see the shapes underneath. Editing view only: the outlines themselves are not changed, and the preview and the game still draw them.">Outlines</button>
         <button type="button" id="fitBtn">Fit</button>
+        <button type="button" id="zoomOutBtn" title="Zoom out">&minus;</button><button type="button" id="zoomInBtn" title="Zoom in (or pinch with two fingers)">+</button>
         <button type="button" id="mirrorToRightBtn" title="Replace the Right drawing with an exact mirror of the Left one (undo with Ctrl+Z)">Left → Right</button>
         <button type="button" id="mirrorToLeftBtn" title="Replace the Left drawing with an exact mirror of the Right one (undo with Ctrl+Z)">Right → Left</button>
         <select id="linkSel" title="Keep one side generated from the other: draw one side once and the other follows after every edit"><option value="">Auto-mirror: off</option><option value="side>right">Auto: Left → Right</option><option value="right>side">Auto: Right → Left</option></select>
@@ -1035,6 +1036,29 @@ function fitView() {
   ui.pan = [-(x0 + x1) / 2 * ui.zoom, -(y0 + y1) / 2 * ui.zoom]; renderEdit();
 }
 $("fitBtn").addEventListener("click", fitView);
+const zoomBy = f => { const z0 = ui.zoom, z1 = Math.min(Math.max(z0 * f, 2), 400); ui.pan = [ui.pan[0] * z1 / z0, ui.pan[1] * z1 / z0]; ui.zoom = z1; renderEdit(); };
+$("zoomInBtn").addEventListener("click", () => zoomBy(1.4)); $("zoomOutBtn").addEventListener("click", () => zoomBy(1 / 1.4));
+/* touch / pen: two fingers pinch to zoom and drag to pan (one finger or the pen edits as usual) */
+(function () {
+  const pts = new Map(); let pinch = null, queued = false;
+  const mid = () => { const a = [...pts.values()]; return [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2, Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]) || 1]; };
+  edit.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse") return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) {
+      drag = null; const r = edit.getBoundingClientRect(), m = mid();
+      pinch = { d0: m[2], m0: [m[0] - r.left - r.width / 2, m[1] - r.top - r.height / 2], z0: ui.zoom, pan0: ui.pan.slice() }; e.stopImmediatePropagation(); e.preventDefault();
+    } else if (pts.size > 2) e.stopImmediatePropagation();
+  }, true);
+  edit.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]); if (!pinch || pts.size < 2) return;
+    e.stopImmediatePropagation(); const r = edit.getBoundingClientRect(), m = mid(), z1 = Math.min(Math.max(pinch.z0 * m[2] / pinch.d0, 2), 400);
+    const wx = (pinch.m0[0] - pinch.pan0[0]) / pinch.z0, wy = (pinch.m0[1] - pinch.pan0[1]) / pinch.z0, mx = m[0] - r.left - r.width / 2, my = m[1] - r.top - r.height / 2;
+    ui.zoom = z1; ui.pan = [mx - wx * z1, my - wy * z1];
+    if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; renderEdit(); }); }
+  }, true);
+  const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  edit.addEventListener("pointerup", end, true); edit.addEventListener("pointercancel", end, true);
+})();
 $("showAll").addEventListener("click", () => { [...ui.hiddenParts].forEach(k => { if (k.startsWith(ui.view + ":")) ui.hiddenParts.delete(k); }); renderTree(); renderEdit(); });
 $("pvFace").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ui.pvFace = b.dataset.f; [...$("pvFace").children].forEach(x => x.classList.toggle("on", x === b)); });
 $("pvMove").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ui.pvMove = b.dataset.m; [...$("pvMove").children].forEach(x => x.classList.toggle("on", x === b)); });
