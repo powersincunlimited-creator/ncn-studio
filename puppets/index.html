@@ -150,6 +150,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
       <div id="editTools">
         <button type="button" id="gridBtn" class="on">Grid</button>
         <button type="button" id="handlesBtn" class="on">Handles</button>
+        <button type="button" id="pivotOnlyBtn" title="Pivot only: dragging a pivot (or typing its Position) moves just the pivot, and its polygons and sub-parts stay where they are on screen. Off: everything inside moves with it. Holding Shift while dragging does the opposite of this setting.">Pivot only</button>
         <button type="button" id="outlinesBtn" class="on" title="Show or hide every outline on this canvas, to see the shapes underneath. Editing view only: the outlines themselves are not changed, and the preview and the game still draw them.">Outlines</button>
         <button type="button" id="fitBtn">Fit</button>
         <button type="button" id="zoomOutBtn" title="Zoom out">&minus;</button><button type="button" id="zoomInBtn" title="Zoom in (or pinch with two fingers)">+</button>
@@ -267,7 +268,7 @@ const outW = o => (o.ow === undefined || o.ow === null) ? OUT_W : o.ow, outC = o
 const $ = id => document.getElementById(id);
 const clone = o => JSON.parse(JSON.stringify(o));
 let doc = clone(DEFAULT);
-const ui = { link: "", view: "side", sel: null, collapsed: new Set(), grid: true, handles: true, outlines: true, hiddenParts: new Set(), mirror: false, zoom: 9, pan: [0, 0], pvFace: "left", pvMove: "run", pvAim: "sweep", pvAngle: 0, accent: "#35a6ff", accent2: "#2fd0ff" };
+const ui = { link: "", view: "side", sel: null, collapsed: new Set(), grid: true, handles: true, outlines: true, pivotOnly: false, hiddenParts: new Set(), mirror: false, zoom: 9, pan: [0, 0], pvFace: "left", pvMove: "run", pvAim: "sweep", pvAngle: 0, accent: "#35a6ff", accent2: "#2fd0ff" };
 let undoStack = [], redoStack = [], lastCoalesce = ["", 0];
 let dirty = false, cloudOk = false, db = null, auth = null, nickname = "";
 try { nickname = localStorage.getItem("ncn_puppet_nick") || ""; } catch (e) {}
@@ -567,7 +568,7 @@ edit.addEventListener("pointermove", e => {
   if (!drag) return;
   if (drag.kind === "pan") { const s = svgPoint(e); ui.pan = [drag.pan[0] + s[0] - drag.start[0], drag.pan[1] + s[1] - drag.start[1]]; renderEdit(); return; }
   if (drag.kind === "vertex") { const l = localOf($(drag.hostId), e); drag.p.pts[drag.i] = [round2(l.x), round2(l.y)]; docVer++; markDirty(); renderEdit(); renderInspector(); return; }
-  if (drag.kind === "pivot") { const l = localOf($(drag.hostId), e); drag.node.pos = [round2(l.x), round2(l.y)]; docVer++; markDirty(); renderEdit(); renderInspector(); return; }
+  if (drag.kind === "pivot") { const l = localOf($(drag.hostId), e); movePivot(drag.node, l.x, l.y, ui.pivotOnly !== e.shiftKey); docVer++; markDirty(); renderEdit(); renderInspector(); return; }
   if (drag.kind === "move") {
     const pe = edit.__built.polys.get(drag.p); const l = localOf(pe, e);
     const dx = l.x - drag.startPt.x, dy = l.y - drag.startPt.y;
@@ -693,7 +694,8 @@ function renderInspectorBody() {
     const name = document.createElement("input"); name.type = "text"; name.value = o.name || ""; name.addEventListener("input", () => change(() => { o.name = name.value; }, "name")); ins.appendChild(field("Name", name));
     if (rn) { const p = document.createElement("p"); p.className = "hint"; p.textContent = `Rig part "${rn}": the animation moves this pivot (rest position below) so it can't be deleted.`; ins.appendChild(p); }
     if (!isRoot) {
-      ins.appendChild(field("Position", xy(numInput(o.pos[0], v => change(() => { o.pos = [v, o.pos[1]]; }, "px")), numInput(o.pos[1], v => change(() => { o.pos = [o.pos[0], v]; }, "py")))));
+      ins.appendChild(field("Position", xy(numInput(o.pos[0], v => change(() => { movePivot(o, v, o.pos[1], ui.pivotOnly); }, "px")), numInput(o.pos[1], v => change(() => { movePivot(o, o.pos[0], v, ui.pivotOnly); }, "py")))));
+      const pk = document.createElement("p"); pk.className = "hint"; pk.textContent = ui.pivotOnly ? "Pivot only is ON: moving this pivot leaves its polygons and sub-parts where they are (Shift while dragging = move everything)." : "Moving this pivot moves everything inside it. Turn on Pivot only (toolbar) to move just the pivot, or hold Shift while dragging its handle."; ins.appendChild(pk);
     }
     ins.appendChild(field("Rotation °", numInput(o.rot * 180 / Math.PI, v => change(() => { o.rot = v * Math.PI / 180; }, "rot"), 1)));
     ins.appendChild(field("Scale", xy(numInput(o.scale[0], v => change(() => { o.scale = [v, o.scale[1]]; }, "sx"), 0.05), numInput(o.scale[1], v => change(() => { o.scale = [o.scale[0], v]; }, "sy"), 0.05))));
@@ -779,6 +781,17 @@ function sectionOutlineControls(o) {
 /* Draw order: a part is drawn over the siblings before it in its parent's list, under the ones after it. */
 /* Copy or move a polygon to another view (front / back / left / right). It lands in the section you pick (default: the matching one: armNear -> armL, tail -> tailL ...), at the same place INSIDE
    that section unless "keep screen position" is ticked; "mirror" flips it left-right (on by default between Left and Right). Copy keeps the original; Move removes it. Both undo with Ctrl+Z. */
+/* Move a pivot (its origin, node.pos). Normally everything inside it travels with it. With keep = true ("Pivot only") the polygons and sub-parts stay exactly where they are on
+   screen: each child is shifted the opposite way, in this pivot's own (rotated / scaled) space. Used by the canvas handle and the Position boxes; Shift inverts the toolbar mode. */
+function movePivot(node, x, y, keep) {
+  const dx = x - node.pos[0], dy = y - node.pos[1];
+  if (keep && (dx || dy)) {
+    const c = Math.cos(node.rot), sn = Math.sin(node.rot), ex = (c * dx + sn * dy) / (node.scale[0] || 1), ey = (-sn * dx + c * dy) / (node.scale[1] || 1);
+    node.kids.forEach(k => { if (isPoly(k)) k.poly.pts = k.poly.pts.map(q => [round3(q[0] - ex), round3(q[1] - ey)]); else k.pos = [round3(k.pos[0] - ex), round3(k.pos[1] - ey)]; });
+  }
+  node.pos = [round2(x), round2(y)];
+}
+const round3 = v => Math.round(v * 1000) / 1000;
 const SEND_EQUIV = { armNear: "armL", armFar: "armR", legNear: "legL", legFar: "legR", tail: "tailL", armL: "armNear", armR: "armFar", legL: "legNear", legR: "legFar", tailL: "tail", tailR: "tail" };
 function sendControls(ins, o, parent) {
   const views = ["front", "back", "side", "right"].filter(v => v !== ui.view && doc.views[v]); if (!views.length) return;
@@ -1022,6 +1035,7 @@ $("importBtn").addEventListener("click", () => $("importFile").click());
 $("importFile").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return; try { const d = JSON.parse(await f.text()); const err = validate(d); if (err) { setStatus(err, "bad"); return; } snapshot(); doc = d; ui.sel = null; markDirty(); render(); } catch (x) { setStatus("not a valid JSON file", "bad"); } e.target.value = ""; });
 $("resetBtn").addEventListener("click", () => { showBanner(CHAR ? "Replace everything with " + charLabel(CHAR) + "'s starting drawing and numbers?" : "Replace everything with the art and numbers that ship in the game?", [["Yes, reset", () => { snapshot(); doc = clone(DEFAULT); ui.sel = null; markDirty(); render(); }], ["Cancel", () => {}]]); });
 $("gridBtn").addEventListener("click", e => { ui.grid = !ui.grid; e.target.classList.toggle("on", ui.grid); renderEdit(); });
+$("pivotOnlyBtn").addEventListener("click", e => { ui.pivotOnly = !ui.pivotOnly; e.target.classList.toggle("on", ui.pivotOnly); renderInspector(); });
 $("outlinesBtn").addEventListener("click", e => { ui.outlines = !ui.outlines; e.target.classList.toggle("on", ui.outlines); renderEdit(); });
 $("handlesBtn").addEventListener("click", e => { ui.handles = !ui.handles; e.target.classList.toggle("on", ui.handles); renderEdit(); });
 $("mirrorViewBtn").addEventListener("click", e => { ui.mirror = !ui.mirror; e.target.classList.toggle("on", ui.mirror); renderEdit(); });
