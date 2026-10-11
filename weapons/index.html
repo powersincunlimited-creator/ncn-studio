@@ -102,7 +102,12 @@
   /* drag handles between panels (position remembered; double-click resets) */
   .gv{position:absolute; top:0; bottom:0; width:9px; z-index:20; cursor:col-resize}
   .gv:hover,.gv.drag{background:rgba(53,208,255,.35)}
-  @media (max-width: 860px){ .gv{display:none} }
+  .gv,.gh{touch-action:none}
+  .gh{height:7px; flex:none; cursor:row-resize; background:var(--hair)}
+  .gh:hover,.gh.drag{background:var(--cyan)}
+  .gh.narrow-only{display:none}
+  @media (pointer: coarse){ .gv{width:26px !important; background:rgba(53,208,255,.14)} nav > .gv{right:-13px !important} aside > .gv{left:-13px !important} .gh{height:20px} }
+  @media (max-width: 860px){ .gv{display:none} .gh.narrow-only{display:block} }
 
   nav{
     width:var(--wn, 270px); flex:none; border-right:1px solid var(--hair); background:var(--panel);
@@ -274,7 +279,9 @@
     nav{width:100%; max-height:180px; border-right:none; border-bottom:1px solid var(--hair)}
     main{flex-direction:column}
     .canvas-col{border-right:none; border-bottom:1px solid var(--hair)}
-    .canvas-wrap{height:46vh; min-height:280px}
+    .canvas-wrap{flex:none; height:var(--ch, 46vh); min-height:160px}
+    .canvas-col{flex:none}
+    nav{max-height:var(--nh, 180px)}
     aside{width:100%}
   }
 </style>
@@ -3071,6 +3078,8 @@ async function boot(){
   const apply = () => {
     if(L.wn) body.style.setProperty('--wn', L.wn + 'px'); else body.style.removeProperty('--wn');
     if(L.wa) body.style.setProperty('--wa', L.wa + 'px'); else body.style.removeProperty('--wa');
+    if(L.ch) body.style.setProperty('--ch', L.ch + 'px'); else body.style.removeProperty('--ch');
+    if(L.nh) body.style.setProperty('--nh', L.nh + 'px'); else body.style.removeProperty('--nh');
   };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const gutter = (host, edge, onMove, reset) => {
@@ -3086,6 +3095,21 @@ async function boot(){
   };
   gutter(nav, 'right', ev => { const r = body.getBoundingClientRect(); L.wn = Math.round(clamp(ev.clientX - r.left, 150, r.width - 520)); }, () => { delete L.wn; });
   gutter(aside, 'left', ev => { const r = body.getBoundingClientRect(); L.wa = Math.round(clamp(r.right - ev.clientX, 220, r.width - 460)); }, () => { delete L.wa; });
+  // stacked (narrow) layout: drag the bar under the shape list, and the bar under the drawing, to give the drawing more room
+  const gh = (host, after, onMove, reset) => {
+    const g = document.createElement('div'); g.className = 'gh narrow-only'; g.title = 'Drag to resize (narrow screens) · double-click to reset';
+    after ? host.insertBefore(g, after.nextSibling) : host.appendChild(g);
+    g.addEventListener('dblclick', () => { reset(); save(); apply(); });
+    g.addEventListener('pointerdown', e => {
+      e.preventDefault(); g.setPointerCapture(e.pointerId); g.classList.add('drag');
+      const mv = ev => { onMove(ev); apply(); };
+      const up = () => { g.classList.remove('drag'); g.removeEventListener('pointermove', mv); g.removeEventListener('pointerup', up); save(); };
+      g.addEventListener('pointermove', mv); g.addEventListener('pointerup', up);
+    });
+  };
+  gh(body, nav, ev => { const r = nav.getBoundingClientRect(); L.nh = Math.round(clamp(ev.clientY - r.top, 70, window.innerHeight - 200)); }, () => { delete L.nh; });
+  const cw = document.getElementById('canvasWrap');
+  gh(document.querySelector('.canvas-col'), cw, ev => { const r = cw.getBoundingClientRect(); L.ch = Math.round(clamp(ev.clientY - r.top, 160, window.innerHeight - 120)); }, () => { delete L.ch; });
   apply();
 })();
 boot();

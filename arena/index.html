@@ -39,7 +39,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .pill.ok { color: var(--good); border-color: var(--good); } .pill.warn { color: var(--warn); border-color: var(--warn); } .pill.bad { color: var(--bad); border-color: var(--bad); }
 #banner { padding: 8px 16px; background: #2a2210; border-bottom: 1px solid var(--warn); color: var(--warn); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 main { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--wl, 290px) minmax(0, 1fr) var(--wr, 340px); }
-@media (max-width: 1100px) { .gv { display: none; } main { grid-template-columns: 250px minmax(0, 1fr); } #right { grid-column: 1 / -1; max-height: 46vh; } body { overflow: auto; } }
+/* touch: handles must not scroll the page, and are bigger under a finger */
+.gv, .gh { touch-action: none; }
+@media (pointer: coarse) { main .gv { width: 26px !important; background: rgba(53, 208, 255, 0.14); } main #left > .gv { right: -13px !important; } main #right > .gv { left: -13px !important; } main .gh { height: 20px; } }
+.gh.narrow-only { display: none; }
+@media (max-width: 1100px) { #right > .gv { display: none; } .gh.narrow-only { display: block; } main { grid-template-columns: var(--wl, 250px) minmax(0, 1fr); } #right { grid-column: 1 / -1; max-height: var(--rh, 46vh); } body { overflow: auto; } }
 .col { min-height: 0; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); position: relative; }
 /* drag handles between panels (position remembered; double-click resets) */
 .gv { position: absolute; top: 0; bottom: 0; width: 9px; z-index: 20; cursor: col-resize; }
@@ -88,6 +92,17 @@ main { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--wl, 2
 .lib { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
 dialog { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; max-width: 520px; }
 dialog::backdrop { background: rgba(0,0,0,0.6); }
+.gh.phone-only { display: none; }
+/* phones: drawing first and full width, then the parts / inspector, then the animation panel; each block can be resized by its handle, the page scrolls */
+@media (max-width: 700px) {
+  header { padding: 6px 10px; gap: 6px; } header button, header select { padding: 4px 8px; font-size: 12px; } h1 { font-size: 16px; } h1 small { display: none; }
+  #banner { padding: 5px 10px; font-size: 12px; }
+  main { grid-template-columns: 1fr !important; display: flex; flex-direction: column; flex: none; }
+  .col { border-right: 0; border-left: 0; width: 100%; } #center { order: 1; } #left { order: 2; max-height: var(--lh, 50vh); } #right { order: 3; max-height: var(--rh, 50vh); }
+  #left > .gv, #right > .gv { display: none; }
+  #editWrap { flex: none; height: var(--eh, 62vh); min-height: 240px; }
+  .gh.phone-only { display: block; }
+}
 </style>
 <style>
 .ncn-nav{display:inline-flex;gap:4px;align-items:center;margin:0 6px;flex:none}
@@ -650,6 +665,9 @@ window.ArenaStudio = { get doc() { return doc; }, ui, DEFAULT, render, redraw, f
   const apply = () => {
     if (L.wl) main.style.setProperty("--wl", L.wl + "px"); else main.style.removeProperty("--wl");
     if (L.wr) main.style.setProperty("--wr", L.wr + "px"); else main.style.removeProperty("--wr");
+    if (L.rh) main.style.setProperty("--rh", L.rh + "px"); else main.style.removeProperty("--rh");
+    if (L.eh) main.style.setProperty("--eh", L.eh + "px"); else main.style.removeProperty("--eh");
+    if (L.lh) main.style.setProperty("--lh", L.lh + "px"); else main.style.removeProperty("--lh");
     if (L.addH) { addSec.style.flex = "0 0 " + L.addH + "px"; addSec.style.overflow = "auto"; propsSec.style.flex = "1 1 0"; } else { addSec.style.flex = "0 0 auto"; addSec.style.overflow = ""; propsSec.style.flex = "1 1 50%"; }
   };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -665,6 +683,12 @@ window.ArenaStudio = { get doc() { return doc; }, ui, DEFAULT, render, redraw, f
   const mkV = (host, edge, onMove, reset) => { const g = document.createElement("div"); g.className = "gv"; g.style[edge] = "-5px"; g.title = "Drag to resize the panel · double-click to reset"; host.appendChild(g); drag(g, onMove, reset); };
   mkV(left, "right", ev => { const r = main.getBoundingClientRect(); L.wl = Math.round(clamp(ev.clientX - r.left, 180, r.width - 420)); }, () => { delete L.wl; });
   mkV(right, "left", ev => { const r = main.getBoundingClientRect(); L.wr = Math.round(clamp(r.right - ev.clientX, 240, r.width - 420)); }, () => { delete L.wr; });
+  { const gr = document.createElement("div"); gr.className = "gh narrow-only"; gr.title = "Drag to resize this panel (narrow screens) · double-click to reset"; right.insertBefore(gr, right.firstChild);
+    drag(gr, ev => { const r = right.getBoundingClientRect(); L.rh = Math.round(clamp(r.bottom - ev.clientY, 120, window.innerHeight - 140)); }, () => { delete L.rh; }); }
+  { const gc = document.createElement("div"); gc.className = "gh phone-only"; gc.title = "Drag to make the drawing taller or shorter · double-click to reset"; $("center").appendChild(gc);
+    drag(gc, ev => { const r = $("editWrap").getBoundingClientRect(); L.eh = Math.round(clamp(ev.clientY - r.top, 200, window.innerHeight * 1.2)); }, () => { delete L.eh; });
+    const gl = document.createElement("div"); gl.className = "gh phone-only"; gl.title = "Drag to resize the props panel · double-click to reset"; left.insertBefore(gl, left.firstChild);
+    drag(gl, ev => { const r = left.getBoundingClientRect(); L.lh = Math.round(clamp(r.bottom - ev.clientY, 140, window.innerHeight)); }, () => { delete L.lh; }); }
   const gh = document.createElement("div"); gh.className = "gh"; gh.title = "Drag to resize Props / Add · double-click to reset"; left.insertBefore(gh, addSec);
   drag(gh, ev => { const r = left.getBoundingClientRect(); L.addH = Math.round(clamp(r.bottom - ev.clientY, 60, r.height - 120)); }, () => { delete L.addH; });
   apply();
