@@ -706,6 +706,7 @@ function renderInspectorBody() {
     const b = document.createElement("div"); b.className = "btns";
     b.append(btn("Add rectangle", () => addPoly(o, "rect")), btn("Add triangle", () => addPoly(o, "tri")), btn("Add hexagon", () => addPoly(o, "hex")), btn("Add pivot", () => addNode(o)));
     ins.appendChild(b);
+    if (!isRoot) ins.appendChild(copyPivotControls(o, selectedParent()));
     if (!isRoot) { const b2 = document.createElement("div"); b2.className = "btns"; b2.append(btn("Delete part", deleteSelected, "danger", !!rn || containsRig(o))); ins.appendChild(b2); }
     const h = document.createElement("p"); h.className = "hint"; h.textContent = "Rotation and scale here are the REST values; running and aiming move the rig parts on top of them."; ins.appendChild(h);
   }
@@ -846,6 +847,48 @@ function addPoly(node, kind) {
   const shapes = { rect: [[-3, -3], [3, -3], [3, 3], [-3, 3]], tri: [[0, -3.5], [3.5, 3], [-3.5, 3]], hex: [[3, 0], [1.5, 2.6], [-1.5, 2.6], [-3, 0], [-1.5, -2.6], [1.5, -2.6]] };
   const poly = { poly: { pts: shapes[kind], color: "8a8fb5", outline: true, accent: 0, name: "new " + kind } };
   change(() => { node.kids.push(poly); }); select({ obj: poly });
+}
+/* Copy a pivot with EVERYTHING inside it (sub-pivots, polygons, their motions): fresh ids, so the copy is an ordinary pivot even when the original is a rig part (the game animates rig parts by id, so a copy
+   of one keeps its drawing but not the game's animation: give it a Motion). `mirror` flips it left-right about its parent's origin (positions, rotations, polygons, and the sense of a Motion's rotations). */
+function copyPivot(node, mirror) {
+  let id = nextId(); const c = clone(node);
+  (function ren(x) {
+    if (isPoly(x)) { delete x.poly.outline_was; if (mirror) x.poly.pts = x.poly.pts.map(q => [-q[0], q[1]]).reverse(); return; }
+    x.id = id++;
+    if (mirror) { x.pos = [-x.pos[0], x.pos[1]]; x.rot = -x.rot; if (x.mv) ["swing", "lean", "sway", "aim"].forEach(k => { if (x.mv[k]) x.mv[k] = -x.mv[k]; }); }
+    x.kids.forEach(ren);
+  })(c);
+  c.name = (node.name || "pivot") + (mirror ? " mirror" : " copy");
+  if (!mirror) c.pos = [round2(c.pos[0] + 3), round2(c.pos[1] + 3)];   // beside the original, so it can be told apart and grabbed
+  return c;
+}
+function copyPivotControls(o, parent) {
+  const wrap = document.createElement("div"); wrap.style.display = "grid"; wrap.style.gap = "6px";
+  const row1 = document.createElement("div"); row1.className = "btns";
+  const dup = () => { const c = copyPivot(o, false); change(() => { parent.kids.splice(parent.kids.indexOf(o) + 1, 0, c); }); select({ obj: c }); setStatus("Copied " + (o.name || "pivot") + " and everything inside it", "ok"); };
+  const mir = () => { const c = copyPivot(o, true); change(() => { parent.kids.splice(parent.kids.indexOf(o) + 1, 0, c); }); select({ obj: c }); setStatus("Mirror copy made (flipped about the parent's origin)", "ok"); };
+  row1.append(btn("Duplicate pivot", dup), btn("Mirror copy", mir)); wrap.appendChild(row1);
+  const views = ["front", "back", "side", "right"].filter(v => v !== ui.view && doc.views[v]);
+  if (views.length) {
+    const row2 = document.createElement("div"); row2.className = "btns"; const vs = document.createElement("select"), secs = document.createElement("select"), mc = document.createElement("input"); mc.type = "checkbox";
+    views.forEach(v => { const op = document.createElement("option"); op.value = v; op.textContent = sideLabel(v)[0].toUpperCase() + sideLabel(v).slice(1); vs.appendChild(op); });
+    const fill = () => {
+      const dst = vs.value; secs.innerHTML = ""; const rn = parent ? rigNameOf(ui.view, parent) : "", rig = doc.rig[dst] || {}; const want = rn && (rn in rig ? rn : SEND_EQUIV[rn] in rig ? SEND_EQUIV[rn] : ""); const pre = want ? String(rig[want]) : "";
+      (function rec(n, depth) { if (isPoly(n)) return; const op = document.createElement("option"); op.value = n.id; const r2 = rigNameOf(dst, n); op.textContent = "  ".repeat(depth) + (n.name || "node") + (r2 && r2 !== n.name ? ` (${r2})` : ""); if (String(n.id) === pre) op.selected = true; secs.appendChild(op); n.kids.forEach(k => rec(k, depth + 1)); })(doc.views[dst], 0);
+      mc.checked = ["side", "right"].includes(ui.view) && ["side", "right"].includes(dst);
+    };
+    vs.addEventListener("change", fill); fill();
+    const go = btn("Copy to view", () => {
+      const dst = vs.value; let dest = null; walk(doc.views[dst], n => { if (!isPoly(n) && String(n.id) === secs.value) dest = n; }); if (!dest) return;
+      const c = copyPivot(o, mc.checked); c.name = o.name || "pivot"; c.pos = mc.checked ? c.pos : o.pos.slice();
+      change(() => { dest.kids.push(c); }); ui.view = dst; ui.sel = null; [...$("viewSeg").children].forEach(x => x.classList.toggle("on", x.dataset.view === dst)); render(); select({ obj: c });
+      setStatus("Copied to " + vs.options[vs.selectedIndex].textContent + " / " + (dest.name || "part"), "ok");
+    });
+    const ml = document.createElement("label"); ml.style.cssText = "display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)"; ml.append(mc, "mirror");
+    row2.append(vs, secs, ml, go); wrap.appendChild(row2);
+  }
+  const h = document.createElement("p"); h.className = "hint"; h.textContent = "Copies the pivot with every polygon and sub-pivot inside it (and their motions). A copy of a rig part (arm, leg, tail...) is an ordinary pivot: it keeps the drawing but the game does not animate it, so give it a Motion. Mirror flips it left-right about its parent's origin."; wrap.appendChild(h);
+  return field("Copy", wrap);
 }
 function addNode(parent) { const n = { id: nextId(), name: "pivot", pos: [0, 0], rot: 0, scale: [1, 1], tint: "ffffff", kids: [] }; change(() => { parent.kids.push(n); }); select({ obj: n }); }
 function dup(mirror) {
