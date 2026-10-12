@@ -460,6 +460,7 @@ function deletePart() { const p = sel(); if (!p || ui.part < 0) return; if (p.pa
 const SHAPES = {
   "Rectangle": () => ({ type: "polygon", points: [[-40, -25], [40, -25], [40, 25], [-40, 25]] }),
   "Circle": () => ({ type: "polygon", points: Array.from({ length: 18 }, (_, i) => [Math.round(Math.cos(i / 18 * 6.2832) * 30 * 10) / 10, Math.round(Math.sin(i / 18 * 6.2832) * 30 * 10) / 10]) }),
+  "Oval": () => ({ type: "polygon", points: Array.from({ length: 16 }, (_, i) => { const a = (i + 0.5) / 16 * 6.2832; return [Math.round(Math.sin(a) * 24 * 10) / 10, Math.round(-Math.cos(a) * 34 * 10) / 10]; }) }),   // taller than wide, left-right symmetrical
   "Hexagon": () => ({ type: "polygon", points: Array.from({ length: 6 }, (_, i) => [Math.round(Math.cos(i / 6 * 6.2832) * 40 * 10) / 10, Math.round(Math.sin(i / 6 * 6.2832) * 40 * 10) / 10]) }),
   "Triangle": () => ({ type: "polygon", points: [[0, -34], [34, 26], [-34, 26]] }),
   "Line": () => ({ type: "line", width: 3, closed: false, points: [[-50, 0], [50, 0]] }),

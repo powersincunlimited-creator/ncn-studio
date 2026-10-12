@@ -365,6 +365,7 @@
               <option value="hexagon">Hexagon</option>
               <option value="octagon">Octagon</option>
               <option value="circle">Circle</option>
+              <option value="oval">Oval (tall)</option>
               <option value="star">Star</option>
             </select>
             <button class="btn" id="btnShowAll" hidden title="Show every part you have hidden (editing view only)">Show all</button>
@@ -2649,6 +2650,7 @@ const PRESETS = {
   hexagon:  r => regularPolygon(6, r, -90),
   octagon:  r => regularPolygon(8, r, 22.5),
   circle:   r => regularPolygon(20, r, 0),
+  oval:     r => Array.from({length:16}, (_, i) => { const a = (i + 0.5) / 16 * Math.PI * 2; return [round3(Math.sin(a) * r * 0.72), round3(-Math.cos(a) * r)]; }),   // taller than wide, left-right symmetrical
   star:     r => starPolygon(5, r, r*0.45, -90),
 };
 
